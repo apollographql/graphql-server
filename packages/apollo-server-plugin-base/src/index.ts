@@ -15,6 +15,7 @@ import {
   GraphQLRequestContextResponseForOperation,
   GraphQLRequestContextExecutionDidStart,
   GraphQLRequestContextWillSendResponse,
+  GraphQLSchemaContext,
 } from 'apollo-server-types';
 
 // We re-export all of these so plugin authors only need to depend on a single
@@ -41,6 +42,7 @@ export {
   GraphQLRequestContextResponseForOperation,
   GraphQLRequestContextExecutionDidStart,
   GraphQLRequestContextWillSendResponse,
+  GraphQLSchemaContext,
 };
 
 export interface ApolloServerPlugin<
@@ -49,13 +51,17 @@ export interface ApolloServerPlugin<
   serverWillStart?(
     service: GraphQLServiceContext,
   ): Promise<GraphQLServerListener | void>;
+
   requestDidStart?(
     requestContext: GraphQLRequestContext<TContext>,
   ): Promise<GraphQLRequestListener<TContext> | void>;
 }
 
 export interface GraphQLServerListener {
+  schemaDidLoadOrUpdate?(schemaContext: GraphQLSchemaContext): void;
+
   serverWillStop?(): Promise<void>;
+
   // At most one plugin's serverWillStart may return a GraphQLServerListener
   // with this method. If one does, it is called once on server startup and the
   // page it returns is served to clients with `accept: text/html` headers. This
@@ -90,18 +96,23 @@ export interface GraphQLRequestListener<
   didResolveSource?(
     requestContext: GraphQLRequestContextDidResolveSource<TContext>,
   ): Promise<void>;
+
   parsingDidStart?(
     requestContext: GraphQLRequestContextParsingDidStart<TContext>,
   ): Promise<GraphQLRequestListenerParsingDidEnd | void>;
+
   validationDidStart?(
     requestContext: GraphQLRequestContextValidationDidStart<TContext>,
   ): Promise<GraphQLRequestListenerValidationDidEnd | void>;
+
   didResolveOperation?(
     requestContext: GraphQLRequestContextDidResolveOperation<TContext>,
   ): Promise<void>;
+
   didEncounterErrors?(
     requestContext: GraphQLRequestContextDidEncounterErrors<TContext>,
   ): Promise<void>;
+
   // If this hook is defined, it is invoked immediately before GraphQL execution
   // would take place. If its return value resolves to a non-null
   // GraphQLResponse, that result is used instead of executing the query.
@@ -110,9 +121,11 @@ export interface GraphQLRequestListener<
   responseForOperation?(
     requestContext: GraphQLRequestContextResponseForOperation<TContext>,
   ): Promise<GraphQLResponse | null>;
+
   executionDidStart?(
     requestContext: GraphQLRequestContextExecutionDidStart<TContext>,
   ): Promise<GraphQLRequestExecutionListener | void>;
+
   willSendResponse?(
     requestContext: GraphQLRequestContextWillSendResponse<TContext>,
   ): Promise<void>;

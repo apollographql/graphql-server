@@ -90,6 +90,11 @@ export interface GraphQLServiceContext {
   serverlessFramework: boolean;
 }
 
+export interface GraphQLSchemaContext {
+  apiSchema: GraphQLSchema;
+  coreSupergraphSdl?: string;
+}
+
 export interface GraphQLRequest {
   query?: string;
   operationName?: string;
@@ -265,12 +270,14 @@ export interface CachePolicy extends CacheHint {
    * make the policy more restrictive or less restrictive.
    */
   replace(hint: CacheHint): void;
+
   /**
    * Mutate this CachePolicy by restricting each field defined in `hint`. This
    * can only make the policy more restrictive: a previously defined `maxAge`
    * can only be reduced, and a previously Private scope cannot be made Public.
    */
   restrict(hint: CacheHint): void;
+
   /**
    * If this policy has a positive `maxAge`, then return a copy of itself as a
    * `CacheHint` with both fields defined. Otherwise return null.
@@ -287,6 +294,7 @@ export interface ResolveInfoCacheControl {
   // Shorthand for `cacheHint.replace(hint)`; also for compatibility with
   // the Apollo Server 2.x API.
   setCacheHint(hint: CacheHint): void;
+
   cacheHintFromType(t: GraphQLCompositeType): CacheHint | undefined;
 }
 
