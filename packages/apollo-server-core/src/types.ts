@@ -17,6 +17,7 @@ import type {
 import type { ApolloServerPlugin } from 'apollo-server-plugin-base';
 
 import type { GraphQLSchemaModule } from '@apollographql/apollo-tools';
+
 export type { GraphQLSchemaModule };
 
 export { KeyValueCache } from 'apollo-server-caching';
@@ -45,7 +46,7 @@ type BaseConfig = Pick<
 >;
 
 export type Unsubscriber = () => void;
-export type SchemaChangeCallback = (schema: GraphQLSchema) => void;
+export type SchemaChangeCallback = (apiSchema: GraphQLSchema) => void;
 
 export type GraphQLServiceConfig = {
   schema: GraphQLSchema;
@@ -54,12 +55,28 @@ export type GraphQLServiceConfig = {
 
 export interface GatewayInterface {
   load(options: { apollo: ApolloConfig }): Promise<GraphQLServiceConfig>;
+
+  /**
+   * @deprecated Use `onSchemaLoadOrUpdate` instead
+   */
   onSchemaChange(callback: SchemaChangeCallback): Unsubscriber;
+
+  // TODO: This is optional because older gateways may not have this method,
+  //       and we only need it in certain circumstances, so we just error in
+  //       those circumstances if we don't have it.
+  onSchemaLoadOrUpdate?(
+    callback: (schemaContext: {
+      apiSchema: GraphQLSchema;
+      coreSupergraphSdl: string;
+    }) => void,
+  ): Unsubscriber;
+
   // Note: The `TContext` typing here is not conclusively behaving as we expect:
   // https://github.com/apollographql/apollo-server/pull/3811#discussion_r387381605
   executor<TContext>(
     requestContext: GraphQLRequestContextExecutionDidStart<TContext>,
   ): Promise<GraphQLExecutionResult>;
+
   stop(): Promise<void>;
 }
 
