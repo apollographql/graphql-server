@@ -118,30 +118,19 @@ export function ApolloServerPluginSchemaReporting(
         );
       }
 
-      // Note that this is not actually the core schema for supergraphs yet, but
-      // this will be fixed by #5187.
-      const coreSchema = overrideReportedSchema ?? printSchema(schema);
-      const coreSchemaHash = computeCoreSchemaHash(coreSchema);
-
-      if (overrideReportedSchema !== undefined) {
-        logger.info(
-          'Apollo schema reporting: schema to report has been overridden',
-        );
-      }
       if (endpointUrl !== undefined) {
         logger.info(
           `Apollo schema reporting: schema reporting URL override: ${endpointUrl}`,
         );
       }
 
-      const schemaReport: SchemaReport = {
+      const baseSchemaReport: Omit<SchemaReport, 'coreSchemaHash'> = {
         bootId,
         graphRef,
         // The infra environment in which this edge server is running, e.g. localhost, Kubernetes
         // Length must be <= 256 characters.
         platform: process.env.APOLLO_SERVER_PLATFORM || 'local',
         runtimeVersion: `node ${process.version}`,
-        coreSchemaHash,
         // An identifier used to distinguish the version of the server code such as git or docker sha.
         // Length must be <= 256 charecters
         userVersion: process.env.APOLLO_SERVER_USER_VERSION,
@@ -152,33 +141,63 @@ export function ApolloServerPluginSchemaReporting(
           require('../../../package.json').version
         }`,
       };
-
-      logger.info(
-        'Apollo schema reporting starting! See your graph at ' +
-          `https://studio.apollographql.com/graph/${encodeURI(
-            graphRef,
-          )}/ with server info ${JSON.stringify(schemaReport)}`,
-      );
-
-      const schemaReporter = new SchemaReporter({
-        schemaReport,
-        coreSchema,
-        apiKey: key,
-        endpointUrl,
-        logger,
-        // Jitter the startup between 0 and 10 seconds
-        initialReportingDelayInMs: Math.floor(
-          Math.random() * (initialDelayMaxMs ?? 10_000),
-        ),
-        fallbackReportingDelayInMs: 20_000,
-        fetcher,
-      });
-
-      schemaReporter.start();
+      let currentSchemaReporter: SchemaReporter | undefined;
 
       return {
+        schemaDidLoadOrUpdate({ apiSchema, coreSupergraphSdl }): void {
+          currentSchemaReporter?.stop();
+
+          if (overrideReportedSchema !== undefined) {
+            if (coreSupergraphSdl !== undefined) {
+              throw new Error(
+                [
+                  `The overrideReportedSchema option is incompatible with gateways`,
+                  `as the schema SDL is given directly by gateway. If you would`,
+                  `like to customize the schema SDL reported, please instead set`,
+                  `the option experimental_updateSupergraphSdl in your gateway`,
+                  `configuration.`,
+                ].join(' '),
+              );
+            }
+            logger.info(
+              'Apollo schema reporting: schema to report has been overridden',
+            );
+          }
+
+          const coreSchema =
+            coreSupergraphSdl ??
+            overrideReportedSchema ??
+            printSchema(apiSchema);
+          const coreSchemaHash = computeCoreSchemaHash(coreSchema);
+          const schemaReport: SchemaReport = {
+            ...baseSchemaReport,
+            coreSchemaHash,
+          };
+
+          currentSchemaReporter = new SchemaReporter({
+            schemaReport,
+            coreSchema,
+            apiKey: key,
+            endpointUrl,
+            logger,
+            // Jitter the startup between 0 and 10 seconds
+            initialReportingDelayInMs: Math.floor(
+              Math.random() * (initialDelayMaxMs ?? 10_000),
+            ),
+            fallbackReportingDelayInMs: 20_000,
+            fetcher,
+          });
+          currentSchemaReporter.start();
+
+          logger.info(
+            'Apollo schema reporting: reporting a new schema to Studio! See your graph at ' +
+              `https://studio.apollographql.com/graph/${encodeURI(
+                graphRef,
+              )}/ with server info ${JSON.stringify(schemaReport)}`,
+          );
+        },
         async serverWillStop() {
-          schemaReporter.stop();
+          currentSchemaReporter?.stop();
         },
       };
     },
