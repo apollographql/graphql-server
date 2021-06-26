@@ -86,11 +86,6 @@ type ServerState =
       barrier: Resolvable<void>;
       schemaManager: SchemaManager;
     }
-  | {
-      phase: 'invoking serverWillStart';
-      barrier: Resolvable<void>;
-      schemaManager: SchemaManager;
-    }
   | { phase: 'failed to start'; error: Error; loadedSchema: boolean }
   | {
       phase: 'started';
@@ -385,11 +380,6 @@ export class ApolloServerBase<
         await schemaManager.stop();
       });
       loadedSchema = true;
-      this.state = {
-        phase: 'invoking serverWillStart',
-        barrier,
-        schemaManager,
-      };
 
       const schemaDerivedData = schemaManager.getSchemaDerivedData();
       const service: GraphQLServiceContext = {
@@ -527,7 +517,6 @@ export class ApolloServerBase<
             'You need to call `server.start()` before using your Apollo Server.',
           );
         case 'starting':
-        case 'invoking serverWillStart':
           await this.state.barrier;
           // continue the while loop
           break;
