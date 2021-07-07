@@ -276,7 +276,8 @@ export class ApolloServerBase<
         schemaManager: new SchemaManager({
           gateway,
           apolloConfig: this.apolloConfig,
-          schemaDerivedDataProvider: this.generateSchemaDerivedData.bind(this),
+          schemaDerivedDataProvider: (schema) =>
+            this.generateSchemaDerivedData(schema),
           logger: this.logger,
         }),
       };
@@ -300,7 +301,8 @@ export class ApolloServerBase<
           apiSchema: this.maybeAddMocksToConstructedSchema(
             this.constructSchema(),
           ),
-          schemaDerivedDataProvider: this.generateSchemaDerivedData.bind(this),
+          schemaDerivedDataProvider: (schema) =>
+            this.generateSchemaDerivedData(schema),
           logger: this.logger,
         }),
       };
