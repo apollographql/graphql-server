@@ -145,12 +145,16 @@ export function ApolloServerPluginSchemaReporting(
 
       return {
         schemaDidLoadOrUpdate({ apiSchema, coreSupergraphSdl }): void {
-          currentSchemaReporter?.stop();
-
           if (overrideReportedSchema !== undefined) {
-            logger.info(
-              'Apollo schema reporting: schema to report has been overridden',
-            );
+            if (currentSchemaReporter) {
+              // When the schema to report has been overridden, there is no need
+              // to create a new schema reporter.
+              return;
+            } else {
+              logger.info(
+                'Apollo schema reporting: schema to report has been overridden',
+              );
+            }
           }
 
           const coreSchema =
@@ -163,6 +167,7 @@ export function ApolloServerPluginSchemaReporting(
             coreSchemaHash,
           };
 
+          currentSchemaReporter?.stop();
           currentSchemaReporter = new SchemaReporter({
             schemaReport,
             coreSchema,
