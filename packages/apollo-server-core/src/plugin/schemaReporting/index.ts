@@ -148,25 +148,14 @@ export function ApolloServerPluginSchemaReporting(
           currentSchemaReporter?.stop();
 
           if (overrideReportedSchema !== undefined) {
-            if (coreSupergraphSdl !== undefined) {
-              throw new Error(
-                [
-                  `The overrideReportedSchema option is incompatible with gateways`,
-                  `as the schema SDL is given directly by gateway. If you would`,
-                  `like to customize the schema SDL reported, please instead set`,
-                  `the option experimental_updateSupergraphSdl in your gateway`,
-                  `configuration.`,
-                ].join(' '),
-              );
-            }
             logger.info(
               'Apollo schema reporting: schema to report has been overridden',
             );
           }
 
           const coreSchema =
-            coreSupergraphSdl ??
             overrideReportedSchema ??
+            coreSupergraphSdl ??
             printSchema(apiSchema);
           const coreSchemaHash = computeCoreSchemaHash(coreSchema);
           const schemaReport: SchemaReport = {
