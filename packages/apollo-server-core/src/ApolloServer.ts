@@ -51,7 +51,7 @@ import {
 } from './plugin';
 import { InternalPluginId, pluginIsInternal } from './internalPlugin';
 import { newCachePolicy } from './cachePolicy';
-import { SchemaManager } from './utils/schemaManager';
+import { GatewayIsTooOldError, SchemaManager } from './utils/schemaManager';
 
 const NoIntrospection = (context: ValidationContext) => ({
   Field(node: FieldDefinitionNode) {
@@ -430,17 +430,20 @@ export class ApolloServerBase<
           if (schemaDidLoadOrUpdate) {
             try {
               schemaManager.onSchemaLoadOrUpdate(schemaDidLoadOrUpdate);
-            } catch (_) {
-              // FIXME: Once a gateway version providing the core schema to
-              //        callbacks has been released, update this message to
-              //        state the specific version needed.
-              throw new Error(
-                [
-                  `One of your plugins uses the 'schemaDidLoadOrUpdate' hook,`,
-                  `but your gateway version is too old to support this hook.`,
-                  `Please update your gateway version to latest.`,
-                ].join(' '),
-              );
+            } catch (e) {
+              if (e instanceof GatewayIsTooOldError) {
+                // FIXME: Once a gateway version providing the core schema to
+                //        callbacks has been released, update this message to
+                //        state the specific version needed.
+                throw new Error(
+                  [
+                    `One of your plugins uses the 'schemaDidLoadOrUpdate' hook,`,
+                    `but your gateway version is too old to support this hook.`,
+                    `Please update your gateway version to latest.`,
+                  ].join(' '),
+                );
+              }
+              throw e;
             }
           }
         },

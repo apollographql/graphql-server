@@ -141,8 +141,8 @@ export class SchemaManager {
       this.modeSpecificState.mode === 'gateway' &&
       !this.modeSpecificState.gateway.onSchemaLoadOrUpdate
     ) {
-      throw new Error(
-        'Your gateway is too old to register a onSchemaLoadOrUpdate() listener',
+      throw new GatewayIsTooOldError(
+        "Your gateway is too old to register a 'onSchemaLoadOrUpdate' listener",
       );
     } else {
       if (!this.isStopped && this.schemaContext) {
@@ -212,5 +212,11 @@ export class SchemaManager {
         }
       });
     }
+  }
+}
+
+export class GatewayIsTooOldError extends Error {
+  public constructor(message: string) {
+    super(message);
   }
 }
