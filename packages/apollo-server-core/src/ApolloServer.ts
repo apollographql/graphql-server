@@ -86,7 +86,7 @@ type ServerState =
       barrier: Resolvable<void>;
       schemaManager: SchemaManager;
     }
-  | { phase: 'failed to start'; error: Error; loadedSchema: boolean }
+  | { phase: 'failed to start'; error: Error }
   | {
       phase: 'started';
       schemaManager: SchemaManager;
@@ -375,13 +375,11 @@ export class ApolloServerBase<
       barrier,
       schemaManager,
     };
-    let loadedSchema = false;
     try {
       await schemaManager.start();
       this.toDispose.add(async () => {
         await schemaManager.stop();
       });
-      loadedSchema = true;
 
       const schemaDerivedData = schemaManager.getSchemaDerivedData();
       const service: GraphQLServiceContext = {
@@ -490,7 +488,7 @@ export class ApolloServerBase<
         schemaManager,
       };
     } catch (error) {
-      this.state = { phase: 'failed to start', error, loadedSchema };
+      this.state = { phase: 'failed to start', error };
       throw error;
     } finally {
       barrier.resolve();
