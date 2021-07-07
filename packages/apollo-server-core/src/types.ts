@@ -59,7 +59,7 @@ export interface GatewayInterface {
   /**
    * @deprecated Use `onSchemaLoadOrUpdate` instead
    */
-  onSchemaChange(callback: SchemaChangeCallback): Unsubscriber;
+  onSchemaChange?(callback: SchemaChangeCallback): Unsubscriber;
 
   // TODO: This is optional because older gateways may not have this method,
   //       and we only need it in certain circumstances, so we just error in

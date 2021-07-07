@@ -92,11 +92,15 @@ export class SchemaManager {
           gateway.onSchemaLoadOrUpdate((schemaContext) => {
             this.processSchemaLoadOrUpdateEvent(schemaContext);
           });
-      } else {
+      } else if (gateway.onSchemaChange) {
         this.modeSpecificState.unsubscribeFromGateway = gateway.onSchemaChange(
           (apiSchema) => {
             this.processSchemaLoadOrUpdateEvent({ apiSchema });
           },
+        );
+      } else {
+        throw new Error(
+          "Unexpectedly couldn't find onSchemaChange or onSchemaLoadOrUpdate on gateway",
         );
       }
 
