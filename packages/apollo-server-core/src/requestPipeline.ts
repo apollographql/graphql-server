@@ -392,6 +392,30 @@ export async function processGraphQLRequest<TContext>(
           return fromGraphQLError(e, {
             errorClass: UserInputError,
           });
+        } else if (
+          e.nodes?.length === 1 &&
+          e.nodes[0].kind === Kind.VARIABLE_DEFINITION &&
+          e.nodes[0].type.kind === Kind.NON_NULL_TYPE &&
+          e.nodes[0].type.type.kind === Kind.NAMED_TYPE &&
+          e.message.startsWith(
+            `Variable "$${e.nodes[0].variable.name.value}" of required type "${e.nodes[0].type.type.name.value}!" was not provided.`,
+          )
+        ) {
+          return fromGraphQLError(e, {
+            errorClass: UserInputError,
+          });
+        } else if (
+          e.nodes?.length === 1 &&
+          e.nodes[0].kind === Kind.VARIABLE_DEFINITION &&
+          e.nodes[0].type.kind === Kind.NON_NULL_TYPE &&
+          e.nodes[0].type.type.kind === Kind.NAMED_TYPE &&
+          e.message.startsWith(
+            `Variable "$${e.nodes[0].variable.name.value}" of non-null type "${e.nodes[0].type.type.name.value}!" must not be null.`,
+          )
+        ) {
+          return fromGraphQLError(e, {
+            errorClass: UserInputError,
+          });
         }
         return e;
       });
