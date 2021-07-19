@@ -30,60 +30,63 @@ import http from 'http';
 import https from 'https';
 import type { Socket } from 'net';
 
-export function makeHttpServerStopper(
-  server: http.Server | https.Server,
-  stopGracePeriodMillis: number = Infinity,
-): () => Promise<boolean> {
-  const reqsPerSocket = new Map<Socket, number>();
-  let stopped = false;
-  let gracefully = true;
+export class Stopper {
+  private reqsPerSocket = new Map<Socket, number>();
+  private stopped = false;
 
-  const onConnection = (socket: Socket) => {
-    reqsPerSocket.set(socket, 0);
-    socket.once('close', () => reqsPerSocket.delete(socket));
-  };
+  constructor(private server: http.Server | https.Server) {
+    const onConnection = (socket: Socket) => {
+      this.reqsPerSocket.set(socket, 0);
+      socket.once('close', () => this.reqsPerSocket.delete(socket));
+    };
 
-  if (server instanceof https.Server) {
-    server.on('secureConnection', onConnection);
-  } else {
-    server.on('connection', onConnection);
+    if (server instanceof https.Server) {
+      server.on('secureConnection', onConnection);
+    } else {
+      server.on('connection', onConnection);
+    }
+
+    // Track how many requests are active on the socket.
+    server.on(
+      'request',
+      (req: http.IncomingMessage, res: http.ServerResponse) => {
+        this.reqsPerSocket.set(
+          req.socket,
+          (this.reqsPerSocket.get(req.socket) ?? 0) + 1,
+        );
+        res.once('finish', () => {
+          const pending = (this.reqsPerSocket.get(req.socket) ?? 0) - 1;
+          this.reqsPerSocket.set(req.socket, pending);
+          // If we're in the process of stopping and it's gone idle, close the
+          // socket.
+          if (this.stopped && pending === 0) {
+            req.socket.end();
+          }
+        });
+      },
+    );
   }
 
-  // Track how many requests are active on the socket.
-  server.on(
-    'request',
-    (req: http.IncomingMessage, res: http.ServerResponse) => {
-      reqsPerSocket.set(req.socket, (reqsPerSocket.get(req.socket) ?? 0) + 1);
-      res.once('finish', () => {
-        const pending = (reqsPerSocket.get(req.socket) ?? 0) - 1;
-        reqsPerSocket.set(req.socket, pending);
-        // If we're in the process of stopping and it's gone idle, close the
-        // socket.
-        if (stopped && pending === 0) {
-          req.socket.end();
-        }
-      });
-    },
-  );
+  async stop(stopGracePeriodMillis: number = Infinity): Promise<boolean> {
+    let gracefully = true;
 
-  return async () => {
     // In the off-chance that we are calling `stop` directly from within the
     // HTTP server's request handler (and so we haven't gotten to the
     // `connection` event yet), wait a moment so that `connection` can be called
     // and this request can actually count.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    stopped = true;
+    this.stopped = true;
 
     let timeout: NodeJS.Timeout | null = null;
     // Soon, hard-destroy everything.
     if (stopGracePeriodMillis < Infinity) {
       timeout = setTimeout(() => {
         gracefully = false;
-        reqsPerSocket.forEach((_, socket) => socket.end());
+        this.reqsPerSocket.forEach((_, socket) => socket.end());
         // (FYI, when importing from upstream, not sure why we need setImmediate
         // here.)
         setImmediate(() => {
-          reqsPerSocket.forEach((_, socket) => socket.destroy());
+          this.reqsPerSocket.forEach((_, socket) => socket.destroy());
         });
       }, stopGracePeriodMillis);
     }
@@ -91,7 +94,7 @@ export function makeHttpServerStopper(
     // Close the server and create a Promise that resolves when all connections
     // are closed. Note that we ignore any error from `close` here.
     const closePromise = new Promise<void>((resolve) =>
-      server.close(() => {
+      this.server.close(() => {
         if (timeout) {
           clearTimeout(timeout);
           timeout = null;
@@ -101,7 +104,7 @@ export function makeHttpServerStopper(
     );
 
     // Immediately close any idle sockets.
-    reqsPerSocket.forEach((requests, socket) => {
+    this.reqsPerSocket.forEach((requests, socket) => {
       if (requests === 0) socket.end();
     });
 
@@ -109,5 +112,5 @@ export function makeHttpServerStopper(
     await closePromise;
 
     return gracefully;
-  };
+  }
 }

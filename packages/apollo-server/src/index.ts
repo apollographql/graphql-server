@@ -12,7 +12,7 @@ import {
 } from 'apollo-server-express';
 import type { AddressInfo } from 'net';
 import { format as urlFormat } from 'url';
-import { makeHttpServerStopper } from './stoppable';
+import { Stopper } from './stoppable';
 
 export * from './exports';
 
@@ -25,7 +25,7 @@ export interface ServerInfo {
 }
 
 export class ApolloServer extends ApolloServerExpress {
-  private stopper?: () => Promise<boolean>;
+  private stopper?: Stopper;
   private cors?: CorsOptions | boolean;
   private onHealthCheck?: (req: express.Request) => Promise<any>;
   private stopGracePeriodMillis: number;
@@ -109,20 +109,7 @@ export class ApolloServer extends ApolloServerExpress {
 
     const httpServer = http.createServer(app);
 
-    // `makeHttpServerStopper` returns an async function which:
-    // - closes the server (ie, stops listening)
-    // - closes all connections with no active requests
-    // - continues to close connections when their active request count drops to
-    //   zero
-    // - in 10 seconds (configurable), closes all remaining active connections
-    // - returns (async) once there are no remaining active connections
-    //
-    // If you don't like this behavior, use apollo-server-express instead of
-    // apollo-server.
-    this.stopper = makeHttpServerStopper(
-      httpServer,
-      this.stopGracePeriodMillis,
-    );
+    this.stopper = new Stopper(httpServer);
 
     await new Promise((resolve) => {
       httpServer.once('listening', resolve);
@@ -138,11 +125,23 @@ export class ApolloServer extends ApolloServerExpress {
   public override async stop() {
     // First drain the HTTP server. (See #5074 for a plan to generalize this to
     // the web framework integrations.)
+    //
+    // `Stopper.stop` is an async function which:
+    // - closes the server (ie, stops listening)
+    // - closes all connections with no active requests
+    // - continues to close connections when their active request count drops to
+    //   zero
+    // - in 10 seconds (configurable), closes all remaining active connections
+    // - returns (async) once there are no remaining active connections
+    //
+    // If you don't like this behavior, use apollo-server-express instead of
+    // apollo-server.
     const { stopper } = this;
     if (stopper) {
       this.stopper = undefined;
-      await stopper();
+      await stopper.stop(this.stopGracePeriodMillis);
     }
+
     await super.stop();
   }
 }

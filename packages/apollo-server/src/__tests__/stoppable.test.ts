@@ -31,12 +31,10 @@ import https from 'https';
 const a: any = require('awaiting');
 const request: any = require('requisition');
 import fs from 'fs';
-import { makeHttpServerStopper } from '../stoppable';
+import { Stopper } from '../stoppable';
 // import child from 'child_process'; FIXME
 import path from 'path';
 import { AddressInfo } from 'net';
-
-// FIXME make randomer
 
 function port(s: http.Server) {
   return (s.address() as AddressInfo).port;
@@ -124,11 +122,11 @@ Object.keys(schemes).forEach((schemeName) => {
       });
     });
 
-    describe('makeHttpServerStopper', function () {
+    describe('Stopper', function () {
       it('without keep-alive connections', async () => {
         let closed = 0;
         const server = scheme.server();
-        const stopper = makeHttpServerStopper(server);
+        const stopper = new Stopper(server);
 
         server.on('close', () => closed++);
         server.listen(0);
@@ -139,7 +137,7 @@ Object.keys(schemes).forEach((schemeName) => {
         );
         const text1 = await res1.text();
         expect(text1).toBe('hello');
-        const gracefully = await stopper();
+        const gracefully = await stopper.stop();
         const err = await a.failure(
           request(`${schemeName}://localhost:${p}`).agent(scheme.agent()),
         );
@@ -152,7 +150,7 @@ Object.keys(schemes).forEach((schemeName) => {
       it('with keep-alive connections', async () => {
         let closed = 0;
         const server = scheme.server();
-        const stopper = makeHttpServerStopper(server);
+        const stopper = new Stopper(server);
 
         server.on('close', () => closed++);
         server.listen(0);
@@ -163,7 +161,7 @@ Object.keys(schemes).forEach((schemeName) => {
         );
         const text1 = await res1.text();
         expect(text1).toBe('hello');
-        const gracefully = await stopper();
+        const gracefully = await stopper.stop();
         const err = await a.failure(
           request(`${schemeName}://localhost:${p}`).agent(
             scheme.agent({ keepAlive: true }),
@@ -174,8 +172,7 @@ Object.keys(schemes).forEach((schemeName) => {
         expect(closed).toBe(1);
         expect(gracefully).toBe(true);
 
-        // FIXME make testable
-        // assert.equal(server._pendingSockets.size, 0);
+        expect(stopper['reqsPerSocket'].size).toBe(0);
       });
     });
 
@@ -184,7 +181,7 @@ Object.keys(schemes).forEach((schemeName) => {
         res.writeHead(200);
         res.write('hi');
       });
-      const stopper = makeHttpServerStopper(server, 500);
+      const stopper = new Stopper(server);
       server.listen(0);
       const p = port(server);
       await a.event(server, 'listening');
@@ -198,14 +195,15 @@ Object.keys(schemes).forEach((schemeName) => {
       ]);
       const start = Date.now();
       const closeEventPromise = a.event(server, 'close');
-      const gracefully = await stopper();
+      const gracefully = await stopper.stop(500);
       await closeEventPromise;
       const elapsed = Date.now() - start;
       expect(elapsed).toBeGreaterThanOrEqual(450);
       expect(elapsed).toBeLessThanOrEqual(550);
       expect(gracefully).toBe(false);
-      // FIXME make testable
-      // assert.equal(server._pendingSockets.size, 0);
+      // It takes a moment for the `finish` events to happen.
+      await a.delay(20);
+      expect(stopper['reqsPerSocket'].size).toBe(0);
     });
 
     it('with requests in-flight', async () => {
@@ -215,7 +213,7 @@ Object.keys(schemes).forEach((schemeName) => {
         res.write('hello');
         setTimeout(() => res.end('world'), delay);
       });
-      const stopper = makeHttpServerStopper(server);
+      const stopper = new Stopper(server);
 
       server.listen(0);
       const p = port(server);
@@ -230,7 +228,7 @@ Object.keys(schemes).forEach((schemeName) => {
         ),
       ]);
       const closeEventPromise = a.event(server, 'close');
-      const gracefully = await stopper();
+      const gracefully = await stopper.stop();
       const bodies = await Promise.all(res.map((r) => r.text()));
       await closeEventPromise;
       expect(bodies[0]).toBe('helloworld');
