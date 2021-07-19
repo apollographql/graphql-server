@@ -5,7 +5,6 @@
 // instead.
 import express from 'express';
 import http from 'http';
-import stoppable from 'stoppable';
 import {
   ApolloServer as ApolloServerExpress,
   CorsOptions,
@@ -13,6 +12,7 @@ import {
 } from 'apollo-server-express';
 import type { AddressInfo } from 'net';
 import { format as urlFormat } from 'url';
+import { makeHttpServerStopper } from './stoppable';
 
 export * from './exports';
 
@@ -25,7 +25,7 @@ export interface ServerInfo {
 }
 
 export class ApolloServer extends ApolloServerExpress {
-  private httpServer?: stoppable.StoppableServer;
+  private stopper?: () => Promise<boolean>;
   private cors?: CorsOptions | boolean;
   private onHealthCheck?: (req: express.Request) => Promise<any>;
   private stopGracePeriodMillis: number;
@@ -108,17 +108,21 @@ export class ApolloServer extends ApolloServerExpress {
     });
 
     const httpServer = http.createServer(app);
-    // `stoppable` adds a `.stop()` method which:
+
+    // `makeHttpServerStopper` returns an async function which:
     // - closes the server (ie, stops listening)
     // - closes all connections with no active requests
     // - continues to close connections when their active request count drops to
     //   zero
     // - in 10 seconds (configurable), closes all remaining active connections
-    // - calls its callback once there are no remaining active connections
+    // - returns (async) once there are no remaining active connections
     //
     // If you don't like this behavior, use apollo-server-express instead of
     // apollo-server.
-    this.httpServer = stoppable(httpServer, this.stopGracePeriodMillis);
+    this.stopper = makeHttpServerStopper(
+      httpServer,
+      this.stopGracePeriodMillis,
+    );
 
     await new Promise((resolve) => {
       httpServer.once('listening', resolve);
@@ -132,10 +136,12 @@ export class ApolloServer extends ApolloServerExpress {
   }
 
   public override async stop() {
-    if (this.httpServer) {
-      const httpServer = this.httpServer;
-      await new Promise<void>((resolve) => httpServer.stop(() => resolve()));
-      this.httpServer = undefined;
+    // First drain the HTTP server. (See #5074 for a plan to generalize this to
+    // the web framework integrations.)
+    const { stopper } = this;
+    if (stopper) {
+      this.stopper = undefined;
+      await stopper();
     }
     await super.stop();
   }
