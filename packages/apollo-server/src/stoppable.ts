@@ -32,9 +32,8 @@ import type { Socket } from 'net';
 
 export function makeHttpServerStopper(
   server: http.Server | https.Server,
-  grace?: number,
+  stopGracePeriodMillis: number = Infinity,
 ): () => Promise<boolean> {
-  const realGrace = typeof grace === 'undefined' ? Infinity : grace;
   const reqsPerSocket = new Map<Socket, number>();
   let stopped = false;
   let gracefully = true;
@@ -76,7 +75,7 @@ export function makeHttpServerStopper(
     stopped = true;
 
     // Soon, hard-destroy everything.
-    if (realGrace < Infinity) {
+    if (stopGracePeriodMillis < Infinity) {
       // FIXME don't do unref
       setTimeout(() => {
         gracefully = false;
@@ -86,7 +85,7 @@ export function makeHttpServerStopper(
         setImmediate(() => {
           reqsPerSocket.forEach((_, socket) => socket.destroy());
         });
-      }, realGrace).unref();
+      }, stopGracePeriodMillis).unref();
     }
 
     // Close the server and create a Promise that resolves when all connections
