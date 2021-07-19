@@ -32,7 +32,7 @@ const a: any = require('awaiting');
 const request: any = require('requisition');
 import fs from 'fs';
 import { Stopper } from '../stoppable';
-// import child from 'child_process'; FIXME
+import child from 'child_process';
 import path from 'path';
 import { AddressInfo } from 'net';
 
@@ -253,24 +253,25 @@ Object.keys(schemes).forEach((schemeName) => {
       expect(gracefully).toBe(true);
     });
 
-    // FIXME restore
-    // describe('with in-flights finishing before grace period ends', function () {
-    //   if (schemeName !== 'http') {
-    //     return;
-    //   }
-
-    //   it('exits immediately', async () => {
-    //     const file = path.join(__dirname, 'server.js');
-    //     const server = child.spawn('node', [file, '500']);
-    //     await a.event(server.stdout, 'data');
-    //     const start = Date.now();
-    //     const res = await request(
-    //       `${schemeName}://localhost:${p}/250`,
-    //     ).agent(scheme.agent({ keepAlive: true }));
-    //     const body = await res.text();
-    //     assert.equal(body, 'helloworld');
-    //     assert.closeTo(Date.now() - start, 250, 100);
-    //   });
-    // });
+    if (schemeName === 'http') {
+      it('with in-flights finishing before grace period ends', async () => {
+        const file = path.join(__dirname, 'stoppable', 'server.js');
+        const server = child.spawn('node', [file, '500']);
+        const [data] = await a.event(server.stdout, 'data');
+        const port = +data.toString();
+        expect(typeof port).toBe('number');
+        const start = Date.now();
+        const res = await request(
+          `${schemeName}://localhost:${port}/250`,
+        ).agent(scheme.agent({ keepAlive: true }));
+        const body = await res.text();
+        expect(body).toBe('helloworld');
+        const elapsed = Date.now() - start;
+        expect(elapsed).toBeGreaterThanOrEqual(150);
+        expect(elapsed).toBeLessThanOrEqual(350);
+        // Wait for subprocess to go away.
+        await a.event(server, 'close');
+      });
+    }
   });
 });
