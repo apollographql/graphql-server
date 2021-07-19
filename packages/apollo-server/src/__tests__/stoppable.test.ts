@@ -26,253 +26,290 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-const http = require('http')
-const https = require('https')
-const a = require('awaiting')
-const request = require('requisition')
-const assert = require('chai').assert
-const fs = require('fs')
-const stoppable = require('..')
-const child = require('child_process')
-const path = require('path')
+import http from 'http';
+import https from 'https';
+import a from 'awaiting';
+import request from 'requisition';
+import fs from 'fs';
+import { makeHttpServerStopper } from '../stoppable';
+import child from 'child_process';
+import path from 'path';
 
-const PORT = 8000
+// FIXME make randomer
+const PORT = 8000;
 
-const schemes = {
-  http: {
-    agent: (opts = {}) => new http.Agent(opts),
-    server: handler => http.createServer(handler || ((req, res) => res.end('hello')))
-  },
-  https: {
-    agent: (opts = {}) => https.Agent(Object.assign({rejectUnauthorized: false}, opts)),
-    server: handler => https.createServer({
-      key: fs.readFileSync('test/fixture.key'),
-      cert: fs.readFileSync('test/fixture.cert')
-    }, handler || ((req, res) => res.end('hello')))
-  }
+interface SchemeInfo {
+  agent: (opts?: http.AgentOptions) => http.Agent;
+  server: (handler?: http.RequestListener) => http.Server;
 }
 
-Object.keys(schemes).forEach(schemeName => {
-  const scheme = schemes[schemeName]
+const schemes: Record<string, SchemeInfo> = {
+  http: {
+    agent: (opts = {}) => new http.Agent(opts),
+    server: (handler) =>
+      http.createServer(handler || ((_req, res) => res.end('hello'))),
+  },
+  https: {
+    agent: (opts = {}) =>
+      new https.Agent(Object.assign({ rejectUnauthorized: false }, opts)),
+    server: (handler) =>
+      https.createServer(
+        {
+          key: fs.readFileSync('test/fixture.key'),
+          cert: fs.readFileSync('test/fixture.cert'),
+        },
+        handler || ((_req, res) => res.end('hello')),
+      ),
+  },
+};
+
+Object.keys(schemes).forEach((schemeName) => {
+  const scheme = schemes[schemeName];
 
   describe(`${schemeName}.Server`, function () {
     describe('.close()', () => {
-      let server
+      let server: http.Server;
 
       beforeEach(function () {
-        server = scheme.server()
-      })
+        server = scheme.server();
+      });
 
       describe('without keep-alive connections', () => {
-        let closed = 0
+        let closed = 0;
         it('stops accepting new connections', async () => {
-          server.on('close', () => closed++)
-          server.listen(PORT)
-          await a.event(server, 'listening')
-          const res1 =
-              await request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent())
-          const text1 = await res1.text()
-          assert.equal(text1, 'hello')
-          server.close()
+          server.on('close', () => closed++);
+          server.listen(PORT);
+          await a.event(server, 'listening');
+          const res1 = await request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent(),
+          );
+          const text1 = await res1.text();
+          expect(text1).toBe('hello');
+          server.close();
           const err = await a.failure(
-            request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent()))
-          assert.match(err.message, /ECONNREFUSED/)
-        })
+            request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent()),
+          );
+          expect(err.message).toMatch(/ECONNREFUSED/);
+        });
 
         it('closes', () => {
-          assert.equal(closed, 1)
-        })
-      })
+          expect(closed).toBe(1);
+        });
+      });
 
       describe('with keep-alive connections', () => {
-        let closed = 0
+        let closed = 0;
 
         it('stops accepting new connections', async () => {
-          server.on('close', () => closed++)
-          server.listen(PORT)
-          await a.event(server, 'listening')
-          const res1 = await request(`${schemeName}://localhost:${PORT}`)
-            .agent(scheme.agent({keepAlive: true}))
-          const text1 = await res1.text()
-          assert.equal(text1, 'hello')
-          server.close()
-          const err =
-              await a.failure(request(`${schemeName}://localhost:${PORT}`)
-              .agent(scheme.agent({keepAlive: true})))
-          assert.match(err.message, /ECONNREFUSED/)
-        })
+          server.on('close', () => closed++);
+          server.listen(PORT);
+          await a.event(server, 'listening');
+          const res1 = await request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent({ keepAlive: true }),
+          );
+          const text1 = await res1.text();
+          expect(text1).toBe('hello');
+          server.close();
+          const err = await a.failure(
+            request(`${schemeName}://localhost:${PORT}`).agent(
+              scheme.agent({ keepAlive: true }),
+            ),
+          );
+          expect(err.message).toMatch(/ECONNREFUSED/);
+        });
 
         it("doesn't close", () => {
-          assert.equal(closed, 0)
-        })
-      })
-    })
+          expect(closed).toBe(0);
+        });
+      });
+    });
 
-    describe('.stop()', function () {
+    describe('makeHttpServerStopper', function () {
       describe('without keep-alive connections', function () {
-        let closed = 0
-        let gracefully = false
-        let server
+        let closed = 0;
+        let gracefully = false;
+        let server: http.Server;
+        let stopper: () => Promise<void>;
 
         beforeEach(function () {
-          server = stoppable(scheme.server())
-        })
+          server = scheme.server();
+          stopper = makeHttpServerStopper(server);
+        });
 
         it('stops accepting new connections', async () => {
-          server.on('close', () => closed++)
-          server.listen(PORT)
-          await a.event(server, 'listening')
-          const res1 =
-              await request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent())
-          const text1 = await res1.text()
-          assert.equal(text1, 'hello')
+          server.on('close', () => closed++);
+          server.listen(PORT);
+          await a.event(server, 'listening');
+          const res1 = await request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent(),
+          );
+          const text1 = await res1.text();
+          expect(text1).toBe('hello');
           server.stop((e, g) => {
-            gracefully = g
-          })
+            gracefully = g;
+          });
           const err = await a.failure(
-            request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent()))
-          assert.match(err.message, /ECONNREFUSED/)
-        })
+            request(`${schemeName}://localhost:${PORT}`).agent(scheme.agent()),
+          );
+          assert.match(err.message, /ECONNREFUSED/);
+        });
 
         it('closes', () => {
-          assert.equal(closed, 1)
-        })
+          assert.equal(closed, 1);
+        });
 
         it('gracefully', () => {
-          assert.isOk(gracefully)
-        })
-      })
+          assert.isOk(gracefully);
+        });
+      });
 
       describe('with keep-alive connections', () => {
-        let closed = 0
-        let gracefully = false
-        let server
+        let closed = 0;
+        let gracefully = false;
+        let server;
 
         beforeEach(function () {
-          server = stoppable(scheme.server())
-        })
+          server = stoppable(scheme.server());
+        });
 
         it('stops accepting new connections', async () => {
-          server.on('close', () => closed++)
-          server.listen(PORT)
-          await a.event(server, 'listening')
-          const res1 = await request(`${schemeName}://localhost:${PORT}`)
-            .agent(scheme.agent({keepAlive: true}))
-          const text1 = await res1.text()
-          assert.equal(text1, 'hello')
+          server.on('close', () => closed++);
+          server.listen(PORT);
+          await a.event(server, 'listening');
+          const res1 = await request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent({ keepAlive: true }),
+          );
+          const text1 = await res1.text();
+          assert.equal(text1, 'hello');
           server.stop((e, g) => {
-            gracefully = g
-          })
-          const err = await a.failure(request(`${schemeName}://localhost:${PORT}`)
-            .agent(scheme.agent({ keepAlive: true })))
-          assert.match(err.message, /ECONNREFUSED/)
-        })
+            gracefully = g;
+          });
+          const err = await a.failure(
+            request(`${schemeName}://localhost:${PORT}`).agent(
+              scheme.agent({ keepAlive: true }),
+            ),
+          );
+          assert.match(err.message, /ECONNREFUSED/);
+        });
 
-        it('closes', () => { assert.equal(closed, 1) })
+        it('closes', () => {
+          assert.equal(closed, 1);
+        });
 
         it('gracefully', () => {
-          assert.isOk(gracefully)
-        })
+          assert.isOk(gracefully);
+        });
 
-        it('empties all sockets once closed',
-          () => { assert.equal(server._pendingSockets.size, 0) })
+        it('empties all sockets once closed', () => {
+          assert.equal(server._pendingSockets.size, 0);
+        });
 
         it('registers the "close" callback', (done) => {
-          server.listen(PORT)
-          server.stop(done)
-        })
-      })
-    })
+          server.listen(PORT);
+          server.stop(done);
+        });
+      });
+    });
 
     describe('with a 0.5s grace period', () => {
-      let gracefully = true
-      let server
+      let gracefully = true;
+      let server;
 
       beforeEach(function () {
-        server = stoppable(scheme.server((req, res) => {
-          res.writeHead(200)
-          res.write('hi')
-        }), 500)
-      })
+        server = stoppable(
+          scheme.server((req, res) => {
+            res.writeHead(200);
+            res.write('hi');
+          }),
+          500,
+        );
+      });
 
       it('kills connections after 0.5s', async () => {
-        server.listen(PORT)
-        await a.event(server, 'listening')
+        server.listen(PORT);
+        await a.event(server, 'listening');
         await Promise.all([
-          request(`${schemeName}://localhost:${PORT}`)
-            .agent(scheme.agent({keepAlive: true})),
-          request(`${schemeName}://localhost:${PORT}`)
-            .agent(scheme.agent({keepAlive: true}))
-        ])
-        const start = Date.now()
+          request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent({ keepAlive: true }),
+          ),
+          request(`${schemeName}://localhost:${PORT}`).agent(
+            scheme.agent({ keepAlive: true }),
+          ),
+        ]);
+        const start = Date.now();
         server.stop((e, g) => {
-          gracefully = g
-        })
-        await a.event(server, 'close')
-        assert.closeTo(Date.now() - start, 500, 50)
-      })
+          gracefully = g;
+        });
+        await a.event(server, 'close');
+        assert.closeTo(Date.now() - start, 500, 50);
+      });
 
       it('gracefully', () => {
-        assert.isNotOk(gracefully)
-      })
+        assert.isNotOk(gracefully);
+      });
 
       it('empties all sockets', () => {
-        assert.equal(server._pendingSockets.size, 0)
-      })
-    })
+        assert.equal(server._pendingSockets.size, 0);
+      });
+    });
 
     describe('with requests in-flight', () => {
-      let server
-      let gracefully = false
+      let server;
+      let gracefully = false;
 
       beforeEach(function () {
-        server = stoppable(scheme.server((req, res) => {
-          const delay = parseInt(req.url.slice(1), 10)
-          res.writeHead(200)
-          res.write('hello')
-          setTimeout(() => res.end('world'), delay)
-        }))
-      })
+        server = stoppable(
+          scheme.server((req, res) => {
+            const delay = parseInt(req.url.slice(1), 10);
+            res.writeHead(200);
+            res.write('hello');
+            setTimeout(() => res.end('world'), delay);
+          }),
+        );
+      });
 
       it('closes their sockets once they finish', async () => {
-        server.listen(PORT)
-        await a.event(server, 'listening')
-        const start = Date.now()
+        server.listen(PORT);
+        await a.event(server, 'listening');
+        const start = Date.now();
         const res = await Promise.all([
-          request(`${schemeName}://localhost:${PORT}/250`)
-            .agent(scheme.agent({keepAlive: true})),
-          request(`${schemeName}://localhost:${PORT}/500`)
-            .agent(scheme.agent({keepAlive: true}))
-        ])
+          request(`${schemeName}://localhost:${PORT}/250`).agent(
+            scheme.agent({ keepAlive: true }),
+          ),
+          request(`${schemeName}://localhost:${PORT}/500`).agent(
+            scheme.agent({ keepAlive: true }),
+          ),
+        ]);
         server.stop((e, g) => {
-          gracefully = g
-        })
-        const bodies = await Promise.all(res.map(r => r.text()))
-        await a.event(server, 'close')
-        assert.equal(bodies[0], 'helloworld')
-        assert.closeTo(Date.now() - start, 500, 100)
-      })
+          gracefully = g;
+        });
+        const bodies = await Promise.all(res.map((r) => r.text()));
+        await a.event(server, 'close');
+        assert.equal(bodies[0], 'helloworld');
+        assert.closeTo(Date.now() - start, 500, 100);
+      });
       it('gracefully', () => {
-        assert.isOk(gracefully)
-      })
+        assert.isOk(gracefully);
+      });
 
       describe('with in-flights finishing before grace period ends', function () {
         if (schemeName !== 'http') {
-          return
+          return;
         }
 
         it('exits immediately', async () => {
-          const file = path.join(__dirname, 'server.js')
-          const server = child.spawn('node', [file, '500'])
-          await a.event(server.stdout, 'data')
-          const start = Date.now()
-          const res = await request(`${schemeName}://localhost:${PORT}/250`)
-            .agent(scheme.agent({keepAlive: true}))
-          const body = await res.text()
-          assert.equal(body, 'helloworld')
-          assert.closeTo(Date.now() - start, 250, 100)
-        })
-      })
-    })
-  })
-})
+          const file = path.join(__dirname, 'server.js');
+          const server = child.spawn('node', [file, '500']);
+          await a.event(server.stdout, 'data');
+          const start = Date.now();
+          const res = await request(
+            `${schemeName}://localhost:${PORT}/250`,
+          ).agent(scheme.agent({ keepAlive: true }));
+          const body = await res.text();
+          assert.equal(body, 'helloworld');
+          assert.closeTo(Date.now() - start, 250, 100);
+        });
+      });
+    });
+  });
+});
