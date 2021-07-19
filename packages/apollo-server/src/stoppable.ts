@@ -74,10 +74,10 @@ export function makeHttpServerStopper(
     await new Promise<void>((resolve) => setImmediate(resolve));
     stopped = true;
 
+    let timeout: NodeJS.Timeout | null = null;
     // Soon, hard-destroy everything.
     if (stopGracePeriodMillis < Infinity) {
-      // FIXME don't do unref
-      setTimeout(() => {
+      timeout = setTimeout(() => {
         gracefully = false;
         reqsPerSocket.forEach((_, socket) => socket.end());
         // (FYI, when importing from upstream, not sure why we need setImmediate
@@ -85,13 +85,19 @@ export function makeHttpServerStopper(
         setImmediate(() => {
           reqsPerSocket.forEach((_, socket) => socket.destroy());
         });
-      }, stopGracePeriodMillis).unref();
+      }, stopGracePeriodMillis);
     }
 
     // Close the server and create a Promise that resolves when all connections
     // are closed. Note that we ignore any error from `close` here.
     const closePromise = new Promise<void>((resolve) =>
-      server.close(() => resolve()),
+      server.close(() => {
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
+        resolve();
+      }),
     );
 
     // Immediately close any idle sockets.
