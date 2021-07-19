@@ -26,7 +26,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-import http from 'http';
+import type http from 'http';
 import https from 'https';
 import type { Socket } from 'net';
 
@@ -35,18 +35,16 @@ export class Stopper {
   private stopped = false;
 
   constructor(private server: http.Server | https.Server) {
-    const onConnection = (socket: Socket) => {
-      this.reqsPerSocket.set(socket, 0);
-      socket.once('close', () => this.reqsPerSocket.delete(socket));
-    };
+    // Keep a number in reqsPerSocket for each current connection.
+    server.on(
+      server instanceof https.Server ? 'secureConnection' : 'connection',
+      (socket: Socket) => {
+        this.reqsPerSocket.set(socket, 0);
+        socket.once('close', () => this.reqsPerSocket.delete(socket));
+      },
+    );
 
-    if (server instanceof https.Server) {
-      server.on('secureConnection', onConnection);
-    } else {
-      server.on('connection', onConnection);
-    }
-
-    // Track how many requests are active on the socket.
+    // Track how many HTTP requests are active on the socket.
     server.on(
       'request',
       (req: http.IncomingMessage, res: http.ServerResponse) => {
