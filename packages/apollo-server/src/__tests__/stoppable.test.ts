@@ -45,15 +45,30 @@ interface SchemeInfo {
   server: (handler?: http.RequestListener) => http.Server;
 }
 
+const agents: http.Agent[] = [];
+afterEach(() => {
+  agents.forEach((a) => a.destroy());
+  agents.length = 0;
+});
+
 const schemes: Record<string, SchemeInfo> = {
   http: {
-    agent: (opts = {}) => new http.Agent(opts),
+    agent: (opts = {}) => {
+      const a = new http.Agent(opts);
+      agents.push(a);
+      return a;
+    },
     server: (handler) =>
       http.createServer(handler || ((_req, res) => res.end('hello'))),
   },
   https: {
-    agent: (opts = {}) =>
-      new https.Agent(Object.assign({ rejectUnauthorized: false }, opts)),
+    agent: (opts = {}) => {
+      const a = new https.Agent(
+        Object.assign({ rejectUnauthorized: false }, opts),
+      );
+      agents.push(a);
+      return a;
+    },
     server: (handler) =>
       https.createServer(
         {
