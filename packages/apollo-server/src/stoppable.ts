@@ -30,11 +30,19 @@ import http from 'http';
 import https from 'https';
 import type { Socket } from 'net';
 
-export function stoppable(server: http.Server, grace?: number) {
+export function makeHttpServerStopper(
+  server: http.Server | https.Server,
+  grace?: number,
+): () => Promise<boolean> {
   const realGrace = typeof grace === 'undefined' ? Infinity : grace;
   const reqsPerSocket = new Map<Socket, number>();
   let stopped = false;
   let gracefully = true;
+
+  const onConnection = (socket: Socket) => {
+    reqsPerSocket.set(socket, 0);
+    socket.once('close', () => reqsPerSocket.delete(socket));
+  };
 
   if (server instanceof https.Server) {
     server.on('secureConnection', onConnection);
@@ -42,56 +50,59 @@ export function stoppable(server: http.Server, grace?: number) {
     server.on('connection', onConnection);
   }
 
-  server.on('request', onRequest);
-  // FIXME make Promisey
-  const stop = (
-    callback: (e: Error | undefined, gracefully: Boolean) => void,
-  ) => {
-    // allow request handlers to update state before we act on that state
-    setImmediate(() => {
-      stopped = true;
-      if (realGrace < Infinity) {
-        // FIXME don't do unref
-        setTimeout(destroyAll, realGrace).unref();
-      }
-      server.close((e) => {
-        if (callback) {
-          callback(e, gracefully);
+  // Track how many requests are active on the socket.
+  server.on(
+    'request',
+    (req: http.IncomingMessage, res: http.ServerResponse) => {
+      reqsPerSocket.set(req.socket, (reqsPerSocket.get(req.socket) ?? 0) + 1);
+      res.once('finish', () => {
+        const pending = (reqsPerSocket.get(req.socket) ?? 0) - 1;
+        reqsPerSocket.set(req.socket, pending);
+        // If we're in the process of stopping and it's gone idle, close the
+        // socket.
+        if (stopped && pending === 0) {
+          req.socket.end();
         }
       });
-      reqsPerSocket.forEach(endIfIdle);
+    },
+  );
+
+  return async () => {
+    // In the off-chance that we are calling `stop` directly from within the
+    // HTTP server's request handler (and so we haven't gotten to the
+    // `connection` event yet), wait a moment so that `connection` can be called
+    // and this request can actually count.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    stopped = true;
+
+    // Soon, hard-destroy everything.
+    if (realGrace < Infinity) {
+      // FIXME don't do unref
+      setTimeout(() => {
+        gracefully = false;
+        reqsPerSocket.forEach((_, socket) => socket.end());
+        // (FYI, when importing from upstream, not sure why we need setImmediate
+        // here.)
+        setImmediate(() => {
+          reqsPerSocket.forEach((_, socket) => socket.destroy());
+        });
+      }, realGrace).unref();
+    }
+
+    // Close the server and create a Promise that resolves when all connections
+    // are closed. Note that we ignore any error from `close` here.
+    const closePromise = new Promise<void>((resolve) =>
+      server.close(() => resolve()),
+    );
+
+    // Immediately close any idle sockets.
+    reqsPerSocket.forEach((requests, socket) => {
+      if (requests === 0) socket.end();
     });
+
+    // Wait for all connections to be closed.
+    await closePromise;
+
+    return gracefully;
   };
-
-  // FIXME return function instead of augmenting
-  (server as any).stop = stop;
-  return server;
-
-  function onConnection(socket: Socket) {
-    reqsPerSocket.set(socket, 0);
-    socket.once('close', () => reqsPerSocket.delete(socket));
-  }
-
-  function onRequest(req: http.IncomingMessage, res: http.ServerResponse) {
-    reqsPerSocket.set(req.socket, (reqsPerSocket.get(req.socket) ?? 0) + 1);
-    res.once('finish', () => {
-      const pending = (reqsPerSocket.get(req.socket) ?? 0) - 1;
-      reqsPerSocket.set(req.socket, pending);
-      if (stopped && pending === 0) {
-        req.socket.end();
-      }
-    });
-  }
-
-  function endIfIdle(requests: number, socket: Socket) {
-    if (requests === 0) socket.end();
-  }
-
-  function destroyAll() {
-    gracefully = false;
-    reqsPerSocket.forEach((_, socket) => socket.end());
-    setImmediate(() => {
-      reqsPerSocket.forEach((_, socket) => socket.destroy());
-    });
-  }
 }
