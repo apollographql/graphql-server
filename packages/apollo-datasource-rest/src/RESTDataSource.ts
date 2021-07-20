@@ -38,7 +38,7 @@ export type RequestOptions = RequestInit & {
 };
 
 export interface CacheOptions {
-  ttl?: number;
+  ttl?: number | null;
 }
 
 export type Body = BodyInit | object;

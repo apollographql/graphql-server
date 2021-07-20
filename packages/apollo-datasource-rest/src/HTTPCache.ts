@@ -123,7 +123,7 @@ export class HTTPCache {
     }
 
     let ttl =
-      ttlOverride === undefined
+      ttlOverride === undefined || ttlOverride === null
         ? Math.round(policy.timeToLive() / 1000)
         : ttlOverride;
     if (ttl <= 0) return response;
