@@ -2,6 +2,7 @@ export {
   GraphQLOptions,
   Config,
   gql,
+  ContextFunction,
   // Errors
   ApolloError,
   toApolloError,
