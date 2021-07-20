@@ -145,6 +145,9 @@ export class SchemaManager {
       this.modeSpecificState.mode === 'gateway' &&
       !this.modeSpecificState.gateway.onSchemaLoadOrUpdate
     ) {
+      // FIXME: Once a gateway version providing the core schema to callbacks
+      //        has been released, update this message to state the specific
+      //        version needed.
       throw new GatewayIsTooOldError(
         "Your gateway is too old to register a 'onSchemaLoadOrUpdate' listener",
       );
