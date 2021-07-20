@@ -528,6 +528,25 @@ describe('RESTDataSource', () => {
       );
     });
 
+    it('returns a copy of the results and not a reference in case of modification', async () => {
+      const dataSource = new (class extends RESTDataSource {
+        baseURL = 'https://api.example.com';
+
+        async getFoo(id: number) {
+          let data = await this.get(`foo/${id}`);
+          data.foo.shift();
+          expect(data.foo.length).toEqual(1)
+          return data;
+        }
+      })();
+
+      dataSource.httpCache = httpCache;
+
+      fetch.mockJSONResponseOnce({ foo: [{}, {}] });
+
+      await Promise.all([dataSource.getFoo(1), dataSource.getFoo(1)]);
+    });
+
     it('does not deduplicate non-GET requests', async () => {
       const dataSource = new (class extends RESTDataSource {
         override baseURL = 'https://api.example.com';
