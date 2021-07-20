@@ -1,0 +1,41 @@
+{
+  "name": "apollo-server-yandex-cloud",
+  "version": "2.19.0",
+  "description": "Production-ready Node.js GraphQL server for Yandex Cloud Serverless Functions",
+  "keywords": [
+    "GraphQL",
+    "Apollo",
+    "Server",
+    "Yandex Cloud",
+    "Javascript"
+  ],
+  "author": "Apollo <opensource@apollographql.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apollographql/apollo-server",
+    "directory": "packages/apollo-server-yandex-cloud"
+  },
+  "homepage": "https://github.com/apollographql/apollo-server#readme",
+  "bugs": {
+    "url": "https://github.com/apollographql/apollo-server/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "@apollographql/graphql-playground-html": "1.6.26",
+    "apollo-server-core": "file:../apollo-server-core",
+    "apollo-server-env": "file:../apollo-server-env",
+    "apollo-server-types": "file:../apollo-server-types",
+    "graphql-tools": "^4.0.0"
+  },
+  "devDependencies": {
+    "apollo-server-integration-testsuite": "file:../apollo-server-integration-testsuite"
+  },
+  "peerDependencies": {
+    "graphql": "^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0"
+  }
+}
