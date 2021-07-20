@@ -10,7 +10,7 @@ import {
 import { CacheOptions } from './RESTDataSource';
 
 export class HTTPCache {
-  private keyValueCache: KeyValueCache;
+  protected keyValueCache: KeyValueCache;
   private httpFetch: typeof fetch;
 
   constructor(
