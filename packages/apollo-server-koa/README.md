@@ -45,6 +45,45 @@ async function startApolloServer() {
 }
 ```
 
+Set up subscriptions for apollo-server-koa
+
+```js
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  subscriptions: {
+    path: "/graphql/",
+    onConnect: async (connectionParams) => {
+      if (connectionParams.authToken) {
+        const userId = await verifyToken(
+          connectionParams.authToken
+        );
+        return { userId };
+      }
+
+      throw new Error("Missing auth token!");
+    },
+  },
+  context: async ({ ctx, connection }) => {
+    // ws connection context
+    if (connection) {
+      return connection.context;
+    }
+
+    // regular context
+    return context;
+  }
+});
+
+const app = new Koa();
+server.applyMiddleware({ app });
+
+const httpServer = app.listen({ port: 4000 }, () =>
+  console.log(`🚀 Server ready at http://localhost:4000${server.graphqlPath}`),
+);
+server.installSubscriptionHandlers(httpServer);
+```
+
 ## Principles
 
 GraphQL Server is built with the following principles in mind:
