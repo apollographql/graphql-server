@@ -547,6 +547,29 @@ describe('RESTDataSource', () => {
       expect(fetch.mock.calls.length).toEqual(2);
     });
 
+    it('deduplicates a request by path when shouldCacheRequest is overridden', async () => {
+      const dataSource = new (class extends RESTDataSource {
+        baseURL = 'https://api.example.com';
+
+        shouldCacheRequest(request: Request): boolean {
+          return request.url.includes('foo') || request.method === 'GET';
+        }
+
+        postFoo(id: number) {
+          return this.post(`foo/${id}`);
+        }
+      })();
+
+      dataSource.httpCache = httpCache;
+
+      fetch.mockJSONResponseOnce();
+      fetch.mockJSONResponseOnce();
+
+      await Promise.all([dataSource.postFoo(1), dataSource.postFoo(1)]);
+
+      expect(fetch.mock.calls.length).toEqual(1);
+    })
+
     it('non-GET request removes memoized request with the same cache key', async () => {
       const dataSource = new (class extends RESTDataSource {
         override baseURL = 'https://api.example.com';

@@ -265,17 +265,26 @@ export abstract class RESTDataSource<TContext = any> extends DataSource {
       });
     };
 
-    if (request.method === 'GET') {
-      let promise = this.memoizedResults.get(cacheKey);
-      if (promise) return promise;
-
-      promise = performRequest();
-      this.memoizedResults.set(cacheKey, promise);
-      return promise;
+    if (this.shouldCacheRequest(request)) {
+      return this.cacheRequest(cacheKey, performRequest)
     } else {
       this.memoizedResults.delete(cacheKey);
       return performRequest();
     }
+  }
+
+  private cacheRequest<T = any>(cacheKey: string, performRequest: () => Promise<T>): Promise<T> {
+    let promise = this.memoizedResults.get(cacheKey);
+    if (promise) return promise;
+
+    promise = performRequest();
+    this.memoizedResults.set(cacheKey, promise);
+    return promise;
+  }
+
+  /** Override to configure caching behaviour per request */
+  protected shouldCacheRequest(request: Request): boolean {
+    return request.method === 'GET';
   }
 
   protected async trace<TResult>(
