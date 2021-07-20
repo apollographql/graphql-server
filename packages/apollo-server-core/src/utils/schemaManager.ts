@@ -125,8 +125,8 @@ export class SchemaManager {
   /**
    * Registers a listener for schema load/update events. Note that the latest
    * event is buffered, i.e.
-   * - If registered before start(), then the callback will be first called in
-   *   start(), and then later for updates.
+   * - If registered before start(), this method will throw. (We have no need
+   *   for registration before start(), but this is easy enough to change.)
    * - If registered after start() but before stop(), the callback will be first
    *   called in this method (for whatever the current schema is), and then
    *   later for updates.
@@ -149,7 +149,10 @@ export class SchemaManager {
         "Your gateway is too old to register a 'onSchemaLoadOrUpdate' listener",
       );
     } else {
-      if (!this.isStopped && this.schemaContext) {
+      if (!this.schemaContext) {
+        throw new Error('You must call start() before onSchemaLoadOrUpdate()');
+      }
+      if (!this.isStopped) {
         try {
           callback(this.schemaContext);
         } catch (e) {
