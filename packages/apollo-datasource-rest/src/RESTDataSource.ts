@@ -13,6 +13,7 @@ import {
 import { ValueOrPromise } from 'apollo-server-types';
 
 import { DataSource, DataSourceConfig } from 'apollo-datasource';
+import { Options as CachePolicyOptions } from 'http-cache-semantics';
 
 import { HTTPCache } from './HTTPCache';
 
@@ -27,6 +28,7 @@ declare module 'apollo-server-env/dist/fetch' {
     cacheOptions?:
       | CacheOptions
       | ((response: Response, request: Request) => CacheOptions | undefined);
+    cachePolicyOptions?: CachePolicyOptions
   }
 }
 
@@ -257,6 +259,7 @@ export abstract class RESTDataSource<TContext = any> extends DataSource {
           const response = await this.httpCache.fetch(request, {
             cacheKey,
             cacheOptions,
+            cachePolicyOptions: options.cachePolicyOptions
           });
           return await this.didReceiveResponse(response, request);
         } catch (error) {

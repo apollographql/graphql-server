@@ -479,4 +479,25 @@ describe('HTTPCache', () => {
     expect(customFetch.mock.calls.length).toEqual(1);
     expect(await response.json()).toEqual({ name: 'Ada Lovelace' });
   });
+
+  it('allows options to be passed to http-cache-semantics', async () => {
+    fetch.mockJSONResponseOnce({ name: 'Ada Lovelace' }, {
+      'Cache-Control': 'max-age=60,must-revalidate',
+      'set-cookie': 'whatever=blah; expires=Mon, 01-Jan-2050 00:00:00 GMT; path=/; domain=www.example.com'
+    });
+
+    await httpCache.fetch(new Request('https://api.example.com/people/1'), { cachePolicyOptions: {
+      // http-cache-semantics won't cache a response with a set-cookie header unless opted in
+      shared: false
+    }});
+
+    advanceTimeBy(10000);
+
+    const response = await httpCache.fetch(
+      new Request('https://api.example.com/people/1'),
+    );
+
+    expect(fetch.mock.calls.length).toEqual(1);
+    expect(await response.json()).toEqual({ name: 'Ada Lovelace' });
+  });
 });

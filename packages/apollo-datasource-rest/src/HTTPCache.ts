@@ -1,6 +1,7 @@
 import { fetch, Request, Response, Headers } from 'apollo-server-env';
 
 import CachePolicy = require('http-cache-semantics');
+import { Options as CachePolicyOptions } from 'http-cache-semantics';
 
 import {
   KeyValueCache,
@@ -31,6 +32,7 @@ export class HTTPCache {
       cacheOptions?:
         | CacheOptions
         | ((response: Response, request: Request) => CacheOptions | undefined);
+      cachePolicyOptions?: CachePolicyOptions
     } = {},
   ): Promise<Response> {
     const cacheKey = options.cacheKey ? options.cacheKey : request.url;
@@ -42,6 +44,7 @@ export class HTTPCache {
       const policy = new CachePolicy(
         policyRequestFrom(request),
         policyResponseFrom(response),
+        options.cachePolicyOptions
       );
 
       return this.storeResponseAndReturnClone(
