@@ -53,7 +53,17 @@ export class HTTPCache {
       );
     }
 
-    const { policy: policyRaw, ttlOverride, body } = JSON.parse(entry);
+    let entryToUse;
+    try {
+      // Try parsing the entry
+      entryToUse = JSON.parse(entry);
+    }
+    catch (ex) {
+      // Use the entry directly when it is already an object
+      entryToUse = entry;
+    }
+
+    const { policy: policyRaw, ttlOverride, body } = entryToUse;
 
     const policy = CachePolicy.fromObject(policyRaw);
     // Remove url from the policy, because otherwise it would never match a request with a custom cache key
