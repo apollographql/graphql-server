@@ -610,6 +610,38 @@ describe('RESTDataSource', () => {
         'https://api.example.com/foo/1?api_key=secret',
       );
     });
+
+    it('allows specifying a custom cache key as part of get RequestInit', async () => {
+      const dataSource = new (class extends RESTDataSource {
+        baseURL = 'https://api.example.com';
+
+        cacheKeyFor(_request: Request): string {
+          throw new Error('should not be called');
+        }
+
+        getFoo(id: number, apiKey: string) {
+          return this.get(
+            `foo/${id}`,
+            { api_key: apiKey },
+            { cacheKey: 'my-cache-key' },
+          );
+        }
+      })();
+
+      dataSource.httpCache = httpCache;
+
+      fetch.mockJSONResponseOnce();
+
+      await Promise.all([
+        dataSource.getFoo(1, 'secret'),
+        dataSource.getFoo(1, 'anotherSecret'),
+      ]);
+
+      expect(fetch.mock.calls.length).toEqual(1);
+      expect(fetch.mock.calls[0][0].url).toEqual(
+        'https://api.example.com/foo/1?api_key=secret',
+      );
+    });
   });
 
   describe('error handling', () => {

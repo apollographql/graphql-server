@@ -24,6 +24,7 @@ import {
 
 declare module 'apollo-server-env/dist/fetch' {
   interface RequestInit {
+    cacheKey?: string;
     cacheOptions?:
       | CacheOptions
       | ((response: Response, request: Request) => CacheOptions | undefined);
@@ -246,7 +247,7 @@ export abstract class RESTDataSource<TContext = any> extends DataSource {
 
     const request = new Request(String(url), options);
 
-    const cacheKey = this.cacheKeyFor(request);
+    const cacheKey = options.cacheKey || this.cacheKeyFor(request);
 
     const performRequest = async () => {
       return this.trace(request, async () => {
