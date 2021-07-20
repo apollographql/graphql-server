@@ -160,10 +160,14 @@ export class SchemaManager {
           callback(this.schemaContext);
         } catch (e) {
           this.logger.error(
-            [
-              "An error was thrown from an 'onSchemaLoadOrUpdate' listener:",
-              `${e?.message ?? e}`,
-            ].join(' '),
+            "An error was thrown from an 'onSchemaLoadOrUpdate' listener",
+          );
+          this.logger.error(e);
+          // Note that onSchemaLoadOrUpdate() is currently only called from
+          // ApolloServerBase._start(), so we throw here to alert the user early
+          // that their callback is failing.
+          throw new Error(
+            `An error was thrown from an 'onSchemaLoadOrUpdate' listener: ${e.message}`,
           );
         }
       }
