@@ -47,6 +47,45 @@ async function startApolloServer() {
 
 Before Apollo Server 3, we officially supported using this package with `connect` as well. `connect` is an older framework that `express` evolved from. For now, we believe that this package is still compatible with `connect` and we even run tests against `connect`, but we may choose to break this compatibility at some point without a major version bump. If you rely on the ability to use Apollo Server with `connect`, you may wish to make your own integration.
 
+### Integration with other middlewares
+#### [Helmet](https://helmetjs.github.io/)
+When using Helmet the default CSP of helmet blocks graphiql's inline scripts support. To enable graphiql with helmet you need to update the contentSecurityPolicies with graphiql's needs.
+The code snippet below makes use of Helmet's default CSP and adds what graphiql needs.
+```js
+app.use(
+  helmet({
+    /**
+     * Default helmet policy + own customizations - graphiql support
+     * - https://helmetjs.github.io/
+     */
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: [
+          "'self'",
+          /** @by-us - adds graphiql support over helmet's default CSP */
+          "'unsafe-inline'",
+        ],
+        baseUri: ["'self'"],
+        blockAllMixedContent: [],
+        fontSrc: ["'self'", 'https:', 'data:'],
+        frameAncestors: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        scriptSrc: [
+          "'self'",
+          /** @by-us - adds graphiql support over helmet's default CSP */
+          "'unsafe-inline'",
+          /** @by-us - adds graphiql support over helmet's default CSP */
+          "'unsafe-eval'",
+        ],
+        upgradeInsecureRequests: [],
+      },
+    },
+  }),
+);
+```
+
+
 ## Principles
 
 GraphQL Server is built with the following principles in mind:
