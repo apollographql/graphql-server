@@ -165,7 +165,7 @@ export default function plugin(
               ...contextualCacheKeyFields,
             });
             const serializedValue = await cache.get(key);
-            if (serializedValue === undefined) {
+            if (serializedValue === undefined || serializedValue === null) {
               return null;
             }
 
