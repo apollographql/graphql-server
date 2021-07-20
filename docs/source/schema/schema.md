@@ -572,7 +572,7 @@ Our `updateUserEmail` mutation would specify `UpdateUserEmailMutationResponse` a
 ```json
 {
   "data": {
-    "updateUser": {
+    "updateUserEmail": {
       "code": "200",
       "success": true,
       "message": "User email was successfully updated",
