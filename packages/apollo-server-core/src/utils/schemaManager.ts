@@ -214,11 +214,9 @@ export class SchemaManager {
           listener(schemaContext);
         } catch (e) {
           this.logger.error(
-            [
-              "An error was thrown from an 'onSchemaLoadOrUpdate' listener:",
-              `${e?.message ?? e}`,
-            ].join(' '),
+            "An error was thrown from an 'onSchemaLoadOrUpdate' listener",
           );
+          this.logger.error(e);
         }
       });
     }
