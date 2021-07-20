@@ -265,7 +265,9 @@ export class ApolloServerBase<
           // removed until after the rest of shutdown happens.
           process.kill(process.pid, signal);
         };
-        process.on(signal, handler);
+        if (!process.listeners(signal).some((listener: Function) =>  listener.toString() === handler.toString())) {
+          process.on(signal, handler);
+        }
         this.toDisposeLast.add(async () => {
           process.removeListener(signal, handler);
         });
