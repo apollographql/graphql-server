@@ -1733,5 +1733,34 @@ export default ({
         );
       });
     });
+
+    /**
+     * This is the beginning of tests which are directly related to HTTP
+     * transport-related functionality.
+     */
+    describe("transport specific", () => {
+      it.todo("returns a 500 if the body of the request is missing");
+      it.todo("returns a 405 if the HTTP method was not 'POST' or 'GET'");
+      it.todo("returns a 400 if the 'query' is missing when the 'GET' method is used");
+      it.todo("returns a 200 when GraphQL execution completes");
+      it.todo("returns a 405 when attempting a 'mutation' when the 'GET' method is used");
+      it.todo("ensure that 'extensions' are properly returned in the response");
+      it.todo("ensure that 'errors' is properly returned in the response");
+      it.todo("ensure that 'data' is properly returned in the response");
+      it.todo("returns a 400 when 'query' is malformed");
+      it.todo("returns a 400 when 'variables' is malformed");
+      it.todo("returns a 400 when the GraphQL operation does not validate");
+      // I'm not sure if this next one is relevant anymore since we'll be
+      // specifically leaving that binding up to the user and it would be
+      // outside of our knowledge/concern.
+      it.todo("returns a 404 on other routes");
+      it.todo("invokes 'serverWillStart' life-cycle hook before serving a request");
+
+      // TODO Consider Persisted Queries.
+      // The HTTP status codes for persisted queries should be generated
+      // within the transport based on the error codes that are related to
+      // persisted queries (i.e. PersistedQueryNotFound)
+      it.todo("returns 400 when persisted query hash is mismatched with the document")
+    });
   });
 };
