@@ -85,6 +85,28 @@ server.listen().then(({ url }) => {
 });
 ```
 
+## OpenTelemetry
+
+[OpenTelemetry](https://opentelemetry.io/) is an open-source framework for configuring and collecting distributed telemetry data (such as metrics and logs) from back-end systems. Its generic APIs enable multiple unrelated systems to report telemetry data in a consistent way.
+
+> Note that [Apollo Studio](https://www.apollographql.com/docs/studio/) does _not_ currently ingest OpenTelemetry data. To report metrics to Studio, [see above](#sending-metrics-to-apollo-studio).
+
+### Required libraries
+
+To enable OpenTelemetry reporting in Apollo Server, first install the following required libraries:
+
+| Name | Description |
+|------|-------------|
+| [`@opentelemetry/instrumentation-http`](https://github.com/open-telemetry/opentelemetry-js/tree/main/packages/opentelemetry-instrumentation-http) | Instrumentation for the `http` and `https` libraries. |
+| [`@opentelemetry/instrumentation-graphql`](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/plugins/node/opentelemetry-instrumentation-graphql) | Instrumentation for the `graphql` library.  |
+| [`opentelemetry-instrumentation-express`](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/plugins/node/opentelemetry-instrumentation-express) | Instrumentation for Express. Required only if you're using `apollo-server` or `apollo-server-express`. |
+
+> If you're using Apollo Server with [Node.js middleware](../integrations/middleware/) _besides_ `apollo-server-express`, an OpenTelemetry plugin might be available for that middleware as well. [See available plugins](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/plugins/node)
+
+### Setup
+
+
+
 ## Logging
 
 You can set up fine-grained operation logging in Apollo Server by defining a custom **plugin**. Apollo Server plugins enable you to perform actions in response to individual phases of the GraphQL request lifecycle, such as whenever a GraphQL request is received from a client.
