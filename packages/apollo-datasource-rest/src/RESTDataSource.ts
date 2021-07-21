@@ -21,6 +21,7 @@ import {
   AuthenticationError,
   ForbiddenError,
 } from 'apollo-server-errors';
+import { performance } from 'perf_hooks';
 
 declare module 'apollo-server-env/dist/fetch' {
   interface RequestInit {
@@ -284,11 +285,11 @@ export abstract class RESTDataSource<TContext = any> extends DataSource {
   ): Promise<TResult> {
     if (process && process.env && process.env.NODE_ENV === 'development') {
       // We're not using console.time because that isn't supported on Cloudflare
-      const startTime = Date.now();
+      const startTime = performance.now();
       try {
         return await fn();
       } finally {
-        const duration = Date.now() - startTime;
+        const duration = performance.now() - startTime;
         const label = `${request.method || 'GET'} ${request.url}`;
         console.log(`${label} (${duration}ms)`);
       }
