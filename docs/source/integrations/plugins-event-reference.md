@@ -3,7 +3,7 @@ title: Apollo Server plugin event reference
 sidebar_title: Event reference
 ---
 
-> **New in Apollo Server 3:** All plugin lifecycle methods are `async`, _except for [`willResolveField`](#willresolvefield)_.
+> **New in Apollo Server 3:** All plugin lifecycle methods are `async`, _except for [`willResolveField`](#willresolvefield) and [`schemaDidLoadOrUpdate`](#schemadidloadorupdate)_.
 
 This reference describes the lifecycle events that your [custom Apollo Server plugin](./plugins/) can respond to.
 
@@ -14,7 +14,7 @@ events** and **request lifecycle events**.
 * Request lifecycle events are associated with the lifecycle of a specific request.
   * You define responses to these events _within_ the response to a `requestDidStart` event, as described in [Responding to request lifecycle events](./plugins#responding-to-request-lifecycle-events).
 
-> With one exception, all plugin methods in Apollo Server 3 are `async`. The exception is `willResolveField`, which is called much more frequently than other plugin methods.
+> With two exceptions, all plugin methods in Apollo Server 3 are `async`. The first exception is `willResolveField`, which is called much more frequently than other plugin methods. The second exception is `schemaDidLoadOrUpdate`, where making the method `async` would introduce unclear ordering semantics around method executions.
 
 ## Server lifecycle events
 
@@ -171,6 +171,35 @@ const server = new ApolloServer({
 If your plugin doesn't need to respond to any request lifecycle events, `requestDidStart`
 should not return a value.
 
+### `schemaDidLoadOrUpdate`
+
+The `schemaDidLoadOrUpdate` event fires whenever Apollo Server initially loads the schema or updates the schema. A `schemaDidLoadOrUpdate` handler is given the new API schema and optionally the new core schema (if using a gateway). If you provide a gateway older than FIXME , attempting to register a `schemaDidLoadOrUpdate` handler will fail.
+
+`schemaDidLoadOrUpdate` is a synchronous plugin API (i.e., it does not return a `Promise`).
+
+#### Example
+
+```js
+const server = new ApolloServer({
+  /* ... other necessary configuration ... */
+
+  plugins: [
+    {
+      async serverWillStart() {
+        return {
+          schemaDidLoadOrUpdate({ apiSchema, coreSupergraphSdl }) {
+            console.log(`The API schema is ${printSchema(apiSchema)}`);
+            if (coreSupergraphSdl) {
+              console.log(`The core schema is ${coreSupergraphSdl}`);
+            }
+          },
+        };
+      },
+    },
+  ],
+});
+```
+
 ## Request lifecycle events
 
 > If you're using TypeScript to create your plugin, implement the [ `GraphQLRequestListener` interface](https://github.com/apollographql/apollo-server/blob/main/packages/apollo-server-plugin-base/src/index.ts) from the `apollo-server-plugin-base` module to define functions for request lifecycle events.
@@ -294,7 +323,7 @@ You provide your `willResolveField` handler in the object returned by your [`exe
 
 Your `willResolveField` handler can optionally return an ["end hook"](./plugins/#end-hooks) function that's invoked with the resolver's result (or the error that it throws). The end hook is called when your resolver has _fully_ resolved (e.g., if the resolver returns a Promise, the hook is called with the Promise's eventual resolved result).
 
-`willResolveField` and its end hook are the only synchronous plugin APIs (ie, they do not return `Promise`s).
+`willResolveField` and its end hook are synchronous plugin APIs (i.e., they do not return `Promise`s).
 
 #### Example
 

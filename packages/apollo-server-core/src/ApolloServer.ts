@@ -24,13 +24,7 @@ import type {
 
 import { GraphQLServerOptions } from './graphqlOptions';
 
-import {
-  Config,
-  Context,
-  ContextFunction,
-  PluginDefinition,
-  GatewayInterface,
-} from './types';
+import { Config, Context, ContextFunction, PluginDefinition } from './types';
 
 import { generateSchemaHash } from './utils/schemaHash';
 import {
@@ -57,6 +51,7 @@ import {
 } from './plugin';
 import { InternalPluginId, pluginIsInternal } from './internalPlugin';
 import { newCachePolicy } from './cachePolicy';
+import { GatewayIsTooOldError, SchemaManager } from './utils/schemaManager';
 
 const NoIntrospection = (context: ValidationContext) => ({
   Field(node: FieldDefinitionNode) {
@@ -75,7 +70,7 @@ function approximateObjectSize<T>(obj: T): number {
   return Buffer.byteLength(JSON.stringify(obj), 'utf8');
 }
 
-type SchemaDerivedData = {
+export type SchemaDerivedData = {
   schema: GraphQLSchema;
   schemaHash: SchemaHash;
   // A store that, when enabled (default), will store the parsed and validated
@@ -85,18 +80,16 @@ type SchemaDerivedData = {
 };
 
 type ServerState =
-  | { phase: 'initialized with schema'; schemaDerivedData: SchemaDerivedData }
-  | { phase: 'initialized with gateway'; gateway: GatewayInterface }
-  | { phase: 'starting'; barrier: Resolvable<void> }
+  | { phase: 'initialized'; schemaManager: SchemaManager }
   | {
-      phase: 'invoking serverWillStart';
+      phase: 'starting';
       barrier: Resolvable<void>;
-      schemaDerivedData: SchemaDerivedData;
+      schemaManager: SchemaManager;
     }
-  | { phase: 'failed to start'; error: Error; loadedSchema: boolean }
+  | { phase: 'failed to start'; error: Error }
   | {
       phase: 'started';
-      schemaDerivedData: SchemaDerivedData;
+      schemaManager: SchemaManager;
     }
   | { phase: 'stopping'; barrier: Resolvable<void> }
   | { phase: 'stopped'; stopError: Error | null };
@@ -109,6 +102,7 @@ class UnreachableCaseError extends Error {
     super(`Unreachable case: ${val}`);
   }
 }
+
 export class ApolloServerBase<
   // The type of the argument to the `context` function for this integration.
   ContextFunctionParams = any,
@@ -277,7 +271,16 @@ export class ApolloServerBase<
       // schema from the gateway. That will wait until the user calls
       // `server.start()` or `server.listen()`, or (in serverless frameworks)
       // until the `this._start()` call at the end of this constructor.
-      this.state = { phase: 'initialized with gateway', gateway };
+      this.state = {
+        phase: 'initialized',
+        schemaManager: new SchemaManager({
+          gateway,
+          apolloConfig: this.apolloConfig,
+          schemaDerivedDataProvider: (schema) =>
+            this.generateSchemaDerivedData(schema),
+          logger: this.logger,
+        }),
+      };
 
       // The main thing that the Gateway does is replace execution with
       // its own executor. It would be awkward if you always had to pass
@@ -293,10 +296,15 @@ export class ApolloServerBase<
       // after construction, though that field never actually worked with
       // gateways.)
       this.state = {
-        phase: 'initialized with schema',
-        schemaDerivedData: this.generateSchemaDerivedData(
-          this.maybeAddMocksToConstructedSchema(this.constructSchema()),
-        ),
+        phase: 'initialized',
+        schemaManager: new SchemaManager({
+          apiSchema: this.maybeAddMocksToConstructedSchema(
+            this.constructSchema(),
+          ),
+          schemaDerivedDataProvider: (schema) =>
+            this.generateSchemaDerivedData(schema),
+          logger: this.logger,
+        }),
       };
     }
 
@@ -355,32 +363,25 @@ export class ApolloServerBase<
   // This is protected so that it can be called from `apollo-server`. It is
   // otherwise an internal implementation detail.
   protected async _start(): Promise<void> {
-    const initialState = this.state;
-    if (
-      initialState.phase !== 'initialized with gateway' &&
-      initialState.phase !== 'initialized with schema'
-    ) {
+    if (this.state.phase !== 'initialized') {
       throw new Error(
-        `called start() with surprising state ${initialState.phase}`,
+        `called start() with surprising state ${this.state.phase}`,
       );
     }
+    const schemaManager = this.state.schemaManager;
     const barrier = resolvable();
-    this.state = { phase: 'starting', barrier };
-    let loadedSchema = false;
+    this.state = {
+      phase: 'starting',
+      barrier,
+      schemaManager,
+    };
     try {
-      const schemaDerivedData =
-        initialState.phase === 'initialized with schema'
-          ? initialState.schemaDerivedData
-          : this.generateSchemaDerivedData(
-              await this.startGatewayAndLoadSchema(initialState.gateway),
-            );
-      loadedSchema = true;
-      this.state = {
-        phase: 'invoking serverWillStart',
-        barrier,
-        schemaDerivedData,
-      };
+      await schemaManager.start();
+      this.toDispose.add(async () => {
+        await schemaManager.stop();
+      });
 
+      const schemaDerivedData = schemaManager.getSchemaDerivedData();
       const service: GraphQLServiceContext = {
         logger: this.logger,
         schema: schemaDerivedData.schema,
@@ -422,6 +423,30 @@ export class ApolloServerBase<
         } => typeof maybeTaggedServerListener.serverListener === 'object',
       );
 
+      taggedServerListeners.forEach(
+        ({ serverListener: { schemaDidLoadOrUpdate } }) => {
+          if (schemaDidLoadOrUpdate) {
+            try {
+              schemaManager.onSchemaLoadOrUpdate(schemaDidLoadOrUpdate);
+            } catch (e) {
+              if (e instanceof GatewayIsTooOldError) {
+                // FIXME: Once a gateway version providing the core schema to
+                //        callbacks has been released, update this message to
+                //        state the specific version needed.
+                throw new Error(
+                  [
+                    `One of your plugins uses the 'schemaDidLoadOrUpdate' hook,`,
+                    `but your gateway version is too old to support this hook.`,
+                    `Please update your gateway version to latest.`,
+                  ].join(' '),
+                );
+              }
+              throw e;
+            }
+          }
+        },
+      );
+
       const serverWillStops = taggedServerListeners.flatMap((l) =>
         l.serverListener.serverWillStop
           ? [l.serverListener.serverWillStop]
@@ -458,9 +483,12 @@ export class ApolloServerBase<
         this.landingPage = null;
       }
 
-      this.state = { phase: 'started', schemaDerivedData };
+      this.state = {
+        phase: 'started',
+        schemaManager,
+      };
     } catch (error) {
-      this.state = { phase: 'failed to start', error, loadedSchema };
+      this.state = { phase: 'failed to start', error };
       throw error;
     } finally {
       barrier.resolve();
@@ -483,8 +511,7 @@ export class ApolloServerBase<
   private async _ensureStarted(): Promise<SchemaDerivedData> {
     while (true) {
       switch (this.state.phase) {
-        case 'initialized with gateway':
-        case 'initialized with schema':
+        case 'initialized':
           // This error probably won't happen: serverless frameworks
           // automatically call `_start` at the end of the constructor, and
           // other frameworks call `assertStarted` before setting things up
@@ -493,7 +520,6 @@ export class ApolloServerBase<
             'You need to call `server.start()` before using your Apollo Server.',
           );
         case 'starting':
-        case 'invoking serverWillStart':
           await this.state.barrier;
           // continue the while loop
           break;
@@ -508,7 +534,7 @@ export class ApolloServerBase<
             'This data graph is missing a valid configuration. More details may be available in the server logs.',
           );
         case 'started':
-          return this.state.schemaDerivedData;
+          return this.state.schemaManager.getSchemaDerivedData();
         case 'stopping':
           throw new Error(
             'Cannot execute GraphQL operations while the server is stopping.',
@@ -551,26 +577,6 @@ export class ApolloServerBase<
         'will now fail. The startup error was: ' +
         ((err && err.message) || err),
     );
-  }
-
-  private async startGatewayAndLoadSchema(
-    gateway: GatewayInterface,
-  ): Promise<GraphQLSchema> {
-    // Store the unsubscribe handles, which are returned from
-    // `onSchemaChange`, for later disposal when the server stops
-    const unsubscriber = gateway.onSchemaChange((schema) => {
-      // If we're still happily running, update our schema-derived state.
-      if (this.state.phase === 'started') {
-        this.state.schemaDerivedData = this.generateSchemaDerivedData(schema);
-      }
-    });
-    this.toDispose.add(async () => unsubscriber());
-
-    const config = await gateway.load({
-      apollo: this.apolloConfig,
-    });
-    this.toDispose.add(async () => await gateway.stop?.());
-    return config.schema;
   }
 
   private constructSchema(): GraphQLSchema {
@@ -735,18 +741,6 @@ export class ApolloServerBase<
       const alreadyHavePlugin =
         alreadyHavePluginWithInternalId('SchemaReporting');
       const enabledViaEnvVar = process.env.APOLLO_SCHEMA_REPORTING === 'true';
-      if (alreadyHavePlugin || enabledViaEnvVar) {
-        if (this.config.gateway) {
-          throw new Error(
-            [
-              "Schema reporting is not yet compatible with the gateway. If you're",
-              'interested in using schema reporting with the gateway, please',
-              'contact Apollo support. To set up managed federation, see',
-              'https://go.apollo.dev/s/managed-federation',
-            ].join(' '),
-          );
-        }
-      }
       if (!alreadyHavePlugin) {
         if (!this.apolloConfig.key) {
           if (enabledViaEnvVar) {
@@ -891,10 +885,7 @@ export class ApolloServerBase<
     // Since this function is mostly for testing, you don't need to explicitly
     // start your server before calling it. (That also means you can use it with
     // `apollo-server` which doesn't support `start()`.)
-    if (
-      this.state.phase === 'initialized with gateway' ||
-      this.state.phase === 'initialized with schema'
-    ) {
+    if (this.state.phase === 'initialized') {
       await this._start();
     }
 
@@ -957,6 +948,7 @@ export class ApolloServerBase<
 export type ImplicitlyInstallablePlugin = ApolloServerPlugin & {
   __internal_installed_implicitly__: boolean;
 };
+
 export function isImplicitlyInstallablePlugin(
   p: ApolloServerPlugin,
 ): p is ImplicitlyInstallablePlugin {

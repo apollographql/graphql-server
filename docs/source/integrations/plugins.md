@@ -4,7 +4,7 @@ sidebar_title: Creating plugins
 description: Extend Apollo Server with custom functionality
 ---
 
-> **New in Apollo Server 3:** All plugin lifecycle methods are `async`, _except for [`willResolveField`](./plugins-event-reference/#willresolvefield)_.
+> **New in Apollo Server 3:** All plugin lifecycle methods are `async`, _except for [`willResolveField`](./plugins-event-reference/#willresolvefield) and [`schemaDidLoadOrUpdate`](./plugins-event-reference/#schemadidloadorupdate)_.
 
 You can create your own Apollo Server plugins to perform custom operations in response to certain events. For example, a basic logging plugin might log the GraphQL query string associated with each request that's sent to Apollo Server.
 
@@ -49,8 +49,8 @@ module.exports = (options) => {
 
 ## Responding to events
 
-A plugin specifies exactly which events it responds to by implementing functions that correspond to those events. The plugin in the examples above responds to the `serverWillStart` event, which fires when Apollo Server is preparing to start up. Almost all plugin events are `async` functions (i.e., functions that return `Promise`s). The only exception
-is [`willResolveField`](./plugins-event-reference/#willresolvefield).
+A plugin specifies exactly which events it responds to by implementing functions that correspond to those events. The plugin in the examples above responds to the `serverWillStart` event, which fires when Apollo Server is preparing to start up. Almost all plugin events are `async` functions (i.e., functions that return `Promise`s). The only exceptions
+are [`willResolveField`](./plugins-event-reference/#willresolvefield) and [`schemaDidLoadOrUpdate`](./plugins-event-reference/#schemadidloadorupdate).
 
 A plugin can respond to any combination of [supported events](./plugins-event-reference/).
 
