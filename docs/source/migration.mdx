@@ -652,7 +652,7 @@ We don't expect this to affect many users and we have not publicly suggested usi
 
 In Apollo Server 2, some [plugin events](./integrations/plugins-event-reference/) are synchronous (their return value is not a `Promise`), and some are "maybe-asynchronous" (they could return a `Promise` if they wanted, but didn't have to). This means that you can't do asynchronous work in the former events, and the typings for the latter events are somewhat complex.
 
-In Apollo Server 3, _almost_ all plugin methods are always asynchronous: they always return a `Promise` type. This includes [end hooks](../integrations/plugins/#end-hooks) as well. The exception is `willResolveField` and its end hook, which are always synchronous.
+In Apollo Server 3, _almost_ all plugin methods are always asynchronous: they always return a `Promise` type. This includes [end hooks](../integrations/plugins/#end-hooks) as well. The exceptions are `willResolveField` and its end hook and `schemaDidLoadOrUpdate`, which are always synchronous.
 
 In practice, this means that all of your plugin events should use `async` functions or methods. If you are using TypeScript, you need to do this for your code to compile.
 
