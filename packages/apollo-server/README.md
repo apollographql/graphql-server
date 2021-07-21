@@ -5,6 +5,7 @@
 [![Build Status](https://circleci.com/gh/apollographql/apollo-server/tree/main.svg?style=svg)](https://circleci.com/gh/apollographql/apollo-server/tree/main)
 [![Join the community forum](https://img.shields.io/badge/join%20the%20community-forum-blueviolet)](https://community.apollographql.com)
 [![Read CHANGELOG](https://img.shields.io/badge/read-changelog-blue)](https://github.com/apollographql/apollo-server/blob/HEAD/CHANGELOG.md)
+[![Codecov](https://codecov.io/gh/apollographql/apollo-server/branch/main/graph/badge.svg)](https://codecov.io/gh/apollographql/apollo-server)
 
 Apollo Server is a community-maintained open-source GraphQL server. It works with many Node.js HTTP server frameworks, or can run on its own with a built-in Express server. Apollo Server works with any GraphQL schema built with [GraphQL.js](https://github.com/graphql/graphql-js)--or define a schema's type definitions using schema definition language (SDL).
 
